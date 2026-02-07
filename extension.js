@@ -101,12 +101,16 @@ const FirewallIndicator = GObject.registerClass(
             // Detect current network
             this._detectNetwork();
 
+            this._box = new St.BoxLayout({
+                style_class: 'panel-status-menu-box',
+            });
+
             // Create panel icon
             let icon = new St.Icon({
                 icon_name: 'security-high-symbolic',
                 style_class: 'system-status-icon',
             });
-            this.add_child(icon);
+            this._box.add_child(icon);
 
             // Create label for event count
             this._label = new St.Label({
@@ -114,7 +118,9 @@ const FirewallIndicator = GObject.registerClass(
                 y_align: Clutter.ActorAlign.CENTER,
                 style_class: 'firewall-event-count',
             });
-            this.add_child(this._label);
+            this._box.add_child(this._label);
+
+            this.add_child(this._box);
 
             // Create popup menu
             this._createMenu();
