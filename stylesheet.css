@@ -52,3 +52,80 @@
     text-align: center;
     padding: 10px;
 }
+
+/* History Dialog */
+.firewall-history-dialog {
+    background-color: rgba(30, 30, 30, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+}
+
+.firewall-history-content {
+    padding: 20px;
+    min-width: 600px;
+}
+
+.firewall-history-title {
+    font-size: 1.4em;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: white;
+}
+
+.firewall-history-scroll {
+    max-height: 400px;
+}
+
+.firewall-history-list {
+    margin-top: 10px;
+}
+
+.firewall-history-row {
+    margin-bottom: 5px;
+    padding: 8px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+}
+
+.firewall-history-row:hover,
+.firewall-history-row:focus {
+    background-color: rgba(255, 255, 255, 0.15);
+    outline: none;
+}
+
+.firewall-history-row:active {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+.firewall-history-empty {
+    padding: 20px;
+    text-align: center;
+    color: #888;
+    font-style: italic;
+}
+
+.firewall-history-flag {
+    margin-right: 10px;
+}
+
+.firewall-history-time {
+    color: #888;
+    margin-right: 15px;
+    font-size: 0.9em;
+}
+
+.firewall-history-ip {
+    font-weight: bold;
+    margin-right: 10px;
+    min-width: 120px;
+}
+
+.firewall-history-port {
+    color: #4ecdc4;
+    margin-right: 10px;
+}
+
+.firewall-history-proto {
+    color: #ff6b6b;
+    font-size: 0.8em;
+}

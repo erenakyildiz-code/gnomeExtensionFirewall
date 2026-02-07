@@ -48,6 +48,12 @@
       <summary>Show ICMP</summary>
       <description>Display ICMP packets</description>
     </key>
+
+    <key name="filter-local-discovery" type="b">
+      <default>true</default>
+      <summary>Filter Local Discovery</summary>
+      <description>Filter out common local network discovery traffic (mDNS, IGMP)</description>
+    </key>
     
   </schema>
 </schemalist>

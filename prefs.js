@@ -137,5 +137,18 @@ export default class FirewallMonitorPreferences extends ExtensionPreferences {
             'active',
             Gio.SettingsBindFlags.DEFAULT
         );
+
+        // Filter Local Discovery
+        const filterLocalDiscoveryRow = new Adw.SwitchRow({
+            title: 'Filter Local Discovery',
+            subtitle: 'Hide common local network noise (mDNS, IGMP)',
+        });
+        filterGroup.add(filterLocalDiscoveryRow);
+        settings.bind(
+            'filter-local-discovery',
+            filterLocalDiscoveryRow,
+            'active',
+            Gio.SettingsBindFlags.DEFAULT
+        );
     }
 }

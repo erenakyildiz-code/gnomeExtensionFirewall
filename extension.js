@@ -9,6 +9,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
+import Soup from 'gi://Soup?version=3.0';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
@@ -83,6 +84,105 @@ const NetworkWarningDialog = GObject.registerClass({
     }
 });
 
+// Full history dialog
+const FirewallHistoryDialog = GObject.registerClass(
+    class FirewallHistoryDialog extends ModalDialog.ModalDialog {
+        _init(events) {
+            super._init({ styleClass: 'firewall-history-dialog' });
+
+            let content = new St.BoxLayout({
+                vertical: true,
+                style_class: 'firewall-history-content',
+            });
+
+            // Title
+            let title = new St.Label({
+                text: 'Firewall Block History',
+                style_class: 'firewall-history-title',
+            });
+            content.add_child(title);
+
+            // Scrollable list
+            let scroll = new St.ScrollView({
+                hscrollbar_policy: St.PolicyType.NEVER,
+                vscrollbar_policy: St.PolicyType.AUTOMATIC,
+                style_class: 'firewall-history-scroll',
+            });
+
+            let list = new St.BoxLayout({
+                vertical: true,
+                style_class: 'firewall-history-list',
+            });
+
+            events.forEach(event => {
+                let row = new St.BoxLayout({
+                    style_class: 'firewall-history-row',
+                    reactive: true,
+                    can_focus: true,
+                    track_hover: true,
+                });
+
+                let flag = new St.Label({
+                    text: event.flag || '🏳️',
+                    style_class: 'firewall-history-flag'
+                });
+                row.add_child(flag);
+
+                let time = new St.Label({
+                    text: event.timestamp.split('T')[1].substring(0, 8),
+                    style_class: 'firewall-history-time'
+                });
+                row.add_child(time);
+
+                let ip = new St.Label({
+                    text: event.sourceIP,
+                    style_class: 'firewall-history-ip'
+                });
+                row.add_child(ip);
+
+                let port = new St.Label({
+                    text: `:${event.destPort}`,
+                    style_class: 'firewall-history-port'
+                });
+                row.add_child(port);
+
+                let proto = new St.Label({
+                    text: `(${event.protocol})`,
+                    style_class: 'firewall-history-proto'
+                });
+                row.add_child(proto);
+
+                row.connect('button-press-event', () => {
+                    let text = `${event.sourceIP}:${event.destPort}`;
+                    St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
+                    Main.notify('Copied to clipboard', text);
+                    return Clutter.EVENT_STOP;
+                });
+
+                list.add_child(row);
+            });
+
+            if (events.length === 0) {
+                let emptyLabel = new St.Label({
+                    text: 'No events in history',
+                    style_class: 'firewall-history-empty'
+                });
+                list.add_child(emptyLabel);
+            }
+
+            scroll.set_child(list);
+            content.add_child(scroll);
+
+            this.contentLayout.add_child(content);
+
+            this.addButton({
+                label: 'Close',
+                action: () => this.close(),
+                key: Clutter.KEY_Escape,
+            });
+        }
+    });
+
 const FirewallIndicator = GObject.registerClass(
     class FirewallIndicator extends PanelMenu.Button {
         _init(extension) {
@@ -94,9 +194,14 @@ const FirewallIndicator = GObject.registerClass(
 
             // Network monitoring
             this._networkMonitor = Gio.NetworkMonitor.get_default();
+            this._settings = extension.getSettings();
             this._currentNetwork = null;
+            this._gatewayIP = null;
             this._hasShownWarningForNetwork = false;
             this._networkChangedId = null;
+
+            this._geoipCache = new Map();
+            this._soupSession = new Soup.Session();
 
             // Detect current network
             this._detectNetwork();
@@ -135,15 +240,25 @@ const FirewallIndicator = GObject.registerClass(
         }
 
         _detectNetwork() {
-            // Get current network identifier (simplified - uses default route)
+            // Get current network identifier and gateway
             try {
                 let [success, stdout] = GLib.spawn_command_line_sync('ip route show default');
                 if (success) {
                     let output = new TextDecoder().decode(stdout);
-                    // Extract interface name as network identifier
-                    let match = output.match(/dev\s+(\S+)/);
-                    if (match) {
-                        this._currentNetwork = match[1];
+                    let ifaceMatch = output.match(/dev\s+(\S+)/);
+                    if (ifaceMatch) {
+                        this._currentNetwork = ifaceMatch[1];
+                    } else {
+                        this._currentNetwork = null;
+                    }
+                    // Extract gateway IP
+                    let gwMatch = output.match(/via\s+([^\s]+)/);
+                    if (gwMatch) {
+                        this._gatewayIP = gwMatch[1];
+                        log(`[Firewall Monitor] Detected gateway: ${this._gatewayIP}`);
+                    } else {
+                        this._gatewayIP = null;
+                        log(`[Firewall Monitor] No gateway detected`);
                     }
                 }
             } catch (e) {
@@ -187,6 +302,14 @@ const FirewallIndicator = GObject.registerClass(
             this._eventsSection.addMenuItem(this._noEventsItem);
 
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+            // History button
+            let historyItem = new PopupMenu.PopupMenuItem('Show Full History');
+            historyItem.connect('activate', () => {
+                let dialog = new FirewallHistoryDialog(this._events);
+                dialog.open();
+            });
+            this.menu.addMenuItem(historyItem);
 
             // Clear button
             let clearItem = new PopupMenu.PopupMenuItem('Clear History');
@@ -287,19 +410,108 @@ const FirewallIndicator = GObject.registerClass(
                     return null;
                 }
 
+                let sourceIP = srcMatch[1];
+                let destIP = dstMatch ? dstMatch[1] : 'unknown';
+                let protocol = protoMatch[1];
+
+                // Map protocol numbers to names
+                if (protocol === '2') protocol = 'IGMP';
+                if (protocol === '1') protocol = 'ICMP';
+                if (protocol === '6') protocol = 'TCP';
+                if (protocol === '17') protocol = 'UDP';
+
+                // Filter out router/gateway pings
+                if (this._gatewayIP && sourceIP === this._gatewayIP.trim()) {
+                    return null;
+                }
+
+                // Filter local discovery (mDNS, IGMP, broadcast, IPv6 link-local, LLMNR)
+                if (this._settings.get_boolean('filter-local-discovery')) {
+                    const localDiscoveryIPs = [
+                        '224.0.0.1', '224.0.0.251', '255.255.255.255',
+                        'ff02::1', 'ff02::fb', 'ff02::1:3' // IPv6 Multicast (All nodes, mDNS, LLMNR)
+                    ];
+
+                    if (localDiscoveryIPs.includes(destIP)) {
+                        return null;
+                    }
+                    if (protocol === 'IGMP') {
+                        return null;
+                    }
+
+                    // Filter IPv6 link-local
+                    if (sourceIP.startsWith('fe80:')) {
+                        return null;
+                    }
+
+                    // Filter LLMNR (UDP 5355)
+                    if (protocol === 'UDP' && dptMatch && dptMatch[1] === '5355') {
+                        return null;
+                    }
+                }
+
                 return {
                     timestamp: timestamp,
-                    sourceIP: srcMatch[1],
-                    destIP: dstMatch ? dstMatch[1] : 'unknown',
-                    protocol: protoMatch[1],
+                    sourceIP: sourceIP,
+                    destIP: destIP,
+                    protocol: protocol,
                     sourcePort: sptMatch ? sptMatch[1] : 'N/A',
                     destPort: dptMatch ? dptMatch[1] : 'N/A',
                     interface: inMatch ? inMatch[1] : 'unknown',
+                    flag: '🏳️' // Default flag placeholder
                 };
             } catch (e) {
                 logError(e, 'Error parsing firewall event');
                 return null;
             }
+        }
+
+        async _fetchGeoIP(event) {
+            let ip = event.sourceIP;
+
+            // Skip private IPs
+            if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('127.')) {
+                return;
+            }
+
+            // Check if network is available
+            if (!this._networkMonitor.network_available) {
+                return;
+            }
+
+            if (this._geoipCache.has(ip)) {
+                event.flag = this._geoipCache.get(ip);
+                this._updateMenu();
+                return;
+            }
+
+            try {
+                let message = Soup.Message.new('GET', `https://ipapi.co/${ip}/json/`);
+                this._soupSession.send_and_read_async(message, GLib.PRIORITY_DEFAULT, null, (session, res) => {
+                    try {
+                        let bytes = session.send_and_read_finish(res);
+                        let data = JSON.parse(new TextDecoder().decode(bytes.get_data()));
+                        if (data && data.country_code) {
+                            let flag = this._countryCodeToEmoji(data.country_code);
+                            this._geoipCache.set(ip, flag);
+                            event.flag = flag;
+                            this._updateMenu();
+                        }
+                    } catch (e) {
+                        // Silently fail for GeoIP
+                    }
+                });
+            } catch (e) {
+                // Silently fail
+            }
+        }
+
+        _countryCodeToEmoji(countryCode) {
+            return countryCode
+                .toUpperCase()
+                .replace(/./g, char =>
+                    String.fromCodePoint(char.charCodeAt(0) + 127397)
+                );
         }
 
         _addEvent(event) {
@@ -318,6 +530,9 @@ const FirewallIndicator = GObject.registerClass(
             // Update UI
             this._updateMenu();
             this._updateLabel();
+
+            // Fetch GeoIP
+            this._fetchGeoIP(event);
 
             // Show notification (with cooldown)
             let now = Date.now();
@@ -350,10 +565,15 @@ const FirewallIndicator = GObject.registerClass(
             // Add recent events (show last 10)
             let eventsToShow = this._events.slice(0, 10);
             eventsToShow.forEach(event => {
-                let text = `${event.sourceIP}:${event.sourcePort} → :${event.destPort} (${event.protocol})`;
-                let item = new PopupMenu.PopupMenuItem(text, {
-                    reactive: false,
-                    can_focus: false,
+                let flag = event.flag || '🏳️';
+                let portText = event.destPort !== 'N/A' ? `:${event.destPort}` : '';
+                let text = `${flag} ${event.sourceIP} → ${portText} (${event.protocol})`;
+                let item = new PopupMenu.PopupMenuItem(text);
+
+                item.connect('activate', () => {
+                    let copyText = `${event.sourceIP}:${event.destPort}`;
+                    St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, copyText);
+                    Main.notify('Copied to clipboard', copyText);
                 });
 
                 // Color code by protocol
