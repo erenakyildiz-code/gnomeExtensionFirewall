@@ -1,0 +1,54 @@
+/* Firewall Monitor Extension Styles */
+
+.firewall-event-count {
+    background-color: rgba(255, 107, 107, 0.8);
+    border-radius: 10px;
+    padding: 2px 6px;
+    margin-left: 4px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.firewall-event-item {
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.firewall-event-tcp {
+    color: #ff6b6b;
+}
+
+.firewall-event-udp {
+    color: #4ecdc4;
+}
+
+.firewall-event-icmp {
+    color: #ffe66d;
+}
+
+/* Warning Dialog */
+.firewall-warning-dialog {
+    background-color: rgba(0, 0, 0, 0.9);
+    border: 3px solid #ff6b6b;
+    border-radius: 12px;
+}
+
+.firewall-warning-content {
+    padding: 30px;
+    min-width: 500px;
+}
+
+.firewall-warning-icon {
+    color: #ff6b6b;
+    margin-bottom: 10px;
+}
+
+.firewall-warning-title {
+    text-align: center;
+}
+
+.firewall-warning-message {
+    text-align: center;
+    padding: 10px;
+}
