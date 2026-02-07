@@ -1,5 +1,5 @@
 {
-  "uuid": "firewall-monitor@devil.local",
+  "uuid": "firewall-monitor@erenakyildiz-code.github.com",
   "name": "Firewall Monitor",
   "description": "Monitor firewall activity in real-time. See blocked connection attempts with IP addresses, ports, and protocols.",
   "version": 1,
@@ -10,6 +10,6 @@
     "48",
     "49"
   ],
-  "url": "https://github.com/devil/firewall-monitor",
+  "url": "https://github.com/erenakyildiz-code/gnomeExtensionFirewall",
   "settings-schema": "org.gnome.shell.extensions.firewall-monitor"
 }

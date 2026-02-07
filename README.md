@@ -25,16 +25,16 @@ A GNOME Shell extension for Arch Linux and other distros that monitors firewall 
 ### Manual Setup
 1. Clone the repository or copy files to the extension directory:
    ```bash
-   mkdir -p ~/.local/share/gnome-shell/extensions/firewall-monitor@devil.local
-   cp -r * ~/.local/share/gnome-shell/extensions/firewall-monitor@devil.local/
+   mkdir -p ~/.local/share/gnome-shell/extensions/firewall-monitor@erenakyildiz-code.github.com
+   cp -r * ~/.local/share/gnome-shell/extensions/firewall-monitor@erenakyildiz-code.github.com/
    ```
 2. Compile the schema:
    ```bash
-   glib-compile-schemas ~/.local/share/gnome-shell/extensions/firewall-monitor@devil.local/schemas/
+   glib-compile-schemas ~/.local/share/gnome-shell/extensions/firewall-monitor@erenakyildiz-code.github.com/schemas/
    ```
 3. Enable the extension:
    ```bash
-   gnome-extensions enable firewall-monitor@devil.local
+   gnome-extensions enable firewall-monitor@erenakyildiz-code.github.com
    ```
 4. Restart GNOME Shell (or log out and back in) if it doesn't appear immediately.
 
