@@ -315,6 +315,23 @@ const FirewallIndicator = GObject.registerClass(
             let clearItem = new PopupMenu.PopupMenuItem('Clear History');
             clearItem.connect('activate', () => this._clearEvents());
             this.menu.addMenuItem(clearItem);
+
+            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+            // Notification toggle
+            this._notificationSwitch = new PopupMenu.PopupSwitchMenuItem('Notifications',
+                this._settings.get_boolean('enable-notifications'));
+
+            this._notificationSwitch.connect('toggled', (item, state) => {
+                this._settings.set_boolean('enable-notifications', state);
+            });
+
+            // Keep switch in sync with settings
+            this._settings.connect('changed::enable-notifications', () => {
+                this._notificationSwitch.setToggleState(this._settings.get_boolean('enable-notifications'));
+            });
+
+            this.menu.addMenuItem(this._notificationSwitch);
         }
 
         _startMonitoring() {
@@ -606,6 +623,10 @@ const FirewallIndicator = GObject.registerClass(
         }
 
         _showNotification(event) {
+            if (!this._settings.get_boolean('enable-notifications')) {
+                return;
+            }
+
             let source = new MessageTray.Source({
                 title: 'Firewall Monitor',
                 icon: new Gio.ThemedIcon({ name: 'security-high-symbolic' }),
