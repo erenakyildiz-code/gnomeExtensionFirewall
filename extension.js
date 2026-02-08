@@ -293,14 +293,6 @@ const FirewallIndicator = GObject.registerClass(
             this._eventsSection = new PopupMenu.PopupMenuSection();
             this.menu.addMenuItem(this._eventsSection);
 
-            // No events placeholder
-            this._noEventsItem = new PopupMenu.PopupMenuItem('No firewall blocks detected', {
-                reactive: false,
-                can_focus: false,
-            });
-            this._noEventsItem.label.style = 'font-style: italic; color: #888;';
-            this._eventsSection.addMenuItem(this._noEventsItem);
-
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
             // History button
@@ -487,7 +479,9 @@ const FirewallIndicator = GObject.registerClass(
             let ip = event.sourceIP;
 
             // Skip private IPs
-            if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('127.')) {
+            if (ip.startsWith('192.168.') || ip.startsWith('10.') ||
+                ip.startsWith('127.') || ip.startsWith('172.1') ||
+                ip.startsWith('169.254.') || ip.startsWith('fe80:')) {
                 return;
             }
 
@@ -497,29 +491,79 @@ const FirewallIndicator = GObject.registerClass(
             }
 
             if (this._geoipCache.has(ip)) {
-                event.flag = this._geoipCache.get(ip);
-                this._updateMenu();
+                let cached = this._geoipCache.get(ip);
+                if (cached) {
+                    event.flag = cached;
+                    this._updateMenu();
+                }
                 return;
             }
 
+            this._tryFetchIpApiCo(event, ip);
+        }
+
+        _tryFetchIpApiCo(event, ip) {
             try {
-                let message = Soup.Message.new('GET', `https://ipapi.co/${ip}/json/`);
+                let url = `https://ipapi.co/${ip}/json/`;
+                let message = Soup.Message.new('GET', url);
+                message.get_request_headers().append('User-Agent', 'FirewallMonitorExtension/1.0 (GNOME Shell Extension)');
+
                 this._soupSession.send_and_read_async(message, GLib.PRIORITY_DEFAULT, null, (session, res) => {
                     try {
                         let bytes = session.send_and_read_finish(res);
+                        let responseCode = message.get_status();
+
+                        if (responseCode !== 200) {
+                            log(`[Firewall Monitor] ipapi.co failed (status ${responseCode}), trying fallback...`);
+                            this._tryFetchIpApiCom(event, ip);
+                            return;
+                        }
+
                         let data = JSON.parse(new TextDecoder().decode(bytes.get_data()));
                         if (data && data.country_code) {
                             let flag = this._countryCodeToEmoji(data.country_code);
                             this._geoipCache.set(ip, flag);
                             event.flag = flag;
                             this._updateMenu();
+                        } else {
+                            this._tryFetchIpApiCom(event, ip);
                         }
                     } catch (e) {
-                        // Silently fail for GeoIP
+                        log(`[Firewall Monitor] ipapi.co parse error, trying fallback: ${e.message}`);
+                        this._tryFetchIpApiCom(event, ip);
                     }
                 });
             } catch (e) {
-                // Silently fail
+                this._tryFetchIpApiCom(event, ip);
+            }
+        }
+
+        _tryFetchIpApiCom(event, ip) {
+            try {
+                let url = `http://ip-api.com/json/${ip}`;
+                let message = Soup.Message.new('GET', url);
+                message.get_request_headers().append('User-Agent', 'FirewallMonitorExtension/1.0 (GNOME Shell Extension)');
+
+                this._soupSession.send_and_read_async(message, GLib.PRIORITY_DEFAULT, null, (session, res) => {
+                    try {
+                        let bytes = session.send_and_read_finish(res);
+                        let data = JSON.parse(new TextDecoder().decode(bytes.get_data()));
+                        if (data && data.status === 'success' && data.countryCode) {
+                            let flag = this._countryCodeToEmoji(data.countryCode);
+                            this._geoipCache.set(ip, flag);
+                            event.flag = flag;
+                            this._updateMenu();
+                        } else {
+                            log(`[Firewall Monitor] Fallback GeoIP failed for ${ip}`);
+                            this._geoipCache.set(ip, null); // Mark as failed to avoid repeated lookups
+                        }
+                    } catch (e) {
+                        log(`[Firewall Monitor] Fallback GeoIP error: ${e.message}`);
+                        this._geoipCache.set(ip, null);
+                    }
+                });
+            } catch (e) {
+                log(`[Firewall Monitor] Fallback GeoIP failed to send: ${e.message}`);
             }
         }
 
@@ -575,7 +619,12 @@ const FirewallIndicator = GObject.registerClass(
             this._eventsSection.removeAll();
 
             if (this._events.length === 0) {
-                this._eventsSection.addMenuItem(this._noEventsItem);
+                let noEventsItem = new PopupMenu.PopupMenuItem('No firewall blocks detected', {
+                    reactive: false,
+                    can_focus: false,
+                });
+                noEventsItem.label.style = 'font-style: italic; color: #888;';
+                this._eventsSection.addMenuItem(noEventsItem);
                 return;
             }
 
