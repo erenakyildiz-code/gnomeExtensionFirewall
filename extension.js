@@ -14,9 +14,8 @@ import Soup from 'gi://Soup?version=3.0';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const MAX_EVENTS = 50;
-const NOTIFICATION_COOLDOWN = 5000; // 5 seconds between notifications
+const NOTIFICATION_COOLDOWN = 5000;
 
-// Warning dialog for first firewall hit on new network
 const NetworkWarningDialog = GObject.registerClass({
     Signals: { 'view-details': {} },
 }, class NetworkWarningDialog extends ModalDialog.ModalDialog {
@@ -28,7 +27,6 @@ const NetworkWarningDialog = GObject.registerClass({
             style_class: 'firewall-warning-content',
         });
 
-        // Warning icon
         let icon = new St.Icon({
             icon_name: 'dialog-warning-symbolic',
             icon_size: 64,
@@ -36,7 +34,6 @@ const NetworkWarningDialog = GObject.registerClass({
         });
         content.add_child(icon);
 
-        // Title
         let title = new St.Label({
             text: '⚠️ NETWORK SECURITY WARNING ⚠️',
             style_class: 'firewall-warning-title',
@@ -44,7 +41,6 @@ const NetworkWarningDialog = GObject.registerClass({
         });
         content.add_child(title);
 
-        // Message
         let message = new St.Label({
             text: `The network you are connected to is probing your ports!\n\n` +
                 `Network: ${networkName}\n` +
@@ -55,7 +51,6 @@ const NetworkWarningDialog = GObject.registerClass({
         });
         content.add_child(message);
 
-        // Info
         let info = new St.Label({
             text: 'Your firewall is protecting you. This is normal on public networks,\n' +
                 'but be cautious about what you share on this connection.',
@@ -66,7 +61,6 @@ const NetworkWarningDialog = GObject.registerClass({
 
         this.contentLayout.add_child(content);
 
-        // OK button
         this.addButton({
             label: 'I Understand',
             action: () => this.close(),
@@ -77,14 +71,12 @@ const NetworkWarningDialog = GObject.registerClass({
             label: 'View Details',
             action: () => {
                 this.close();
-                // This will be connected to open the main menu
                 this.emit('view-details');
             },
         });
     }
 });
 
-// Full history dialog
 const FirewallHistoryDialog = GObject.registerClass(
     class FirewallHistoryDialog extends ModalDialog.ModalDialog {
         _init(events) {
@@ -95,14 +87,12 @@ const FirewallHistoryDialog = GObject.registerClass(
                 style_class: 'firewall-history-content',
             });
 
-            // Title
             let title = new St.Label({
                 text: 'Firewall Block History',
                 style_class: 'firewall-history-title',
             });
             content.add_child(title);
 
-            // Scrollable list
             let scroll = new St.ScrollView({
                 hscrollbar_policy: St.PolicyType.NEVER,
                 vscrollbar_policy: St.PolicyType.AUTOMATIC,
@@ -192,7 +182,6 @@ const FirewallIndicator = GObject.registerClass(
             this._events = [];
             this._lastNotification = 0;
 
-            // Network monitoring
             this._networkMonitor = Gio.NetworkMonitor.get_default();
             this._settings = extension.getSettings();
             this._currentNetwork = null;
@@ -203,21 +192,18 @@ const FirewallIndicator = GObject.registerClass(
             this._geoipCache = new Map();
             this._soupSession = new Soup.Session();
 
-            // Detect current network
             this._detectNetwork();
 
             this._box = new St.BoxLayout({
                 style_class: 'panel-status-menu-box',
             });
 
-            // Create panel icon
             let icon = new St.Icon({
                 icon_name: 'security-high-symbolic',
                 style_class: 'system-status-icon',
             });
             this._box.add_child(icon);
 
-            // Create label for event count
             this._label = new St.Label({
                 text: '0',
                 y_align: Clutter.ActorAlign.CENTER,
@@ -227,20 +213,16 @@ const FirewallIndicator = GObject.registerClass(
 
             this.add_child(this._box);
 
-            // Create popup menu
             this._createMenu();
 
-            // Monitor network changes
             this._networkChangedId = this._networkMonitor.connect('network-changed', () => {
                 this._onNetworkChanged();
             });
 
-            // Start monitoring
             this._startMonitoring();
         }
 
         _detectNetwork() {
-            // Get current network identifier and gateway
             try {
                 let [success, stdout] = GLib.spawn_command_line_sync('ip route show default');
                 if (success) {
@@ -251,7 +233,6 @@ const FirewallIndicator = GObject.registerClass(
                     } else {
                         this._currentNetwork = null;
                     }
-                    // Extract gateway IP
                     let gwMatch = output.match(/via\s+([^\s]+)/);
                     if (gwMatch) {
                         this._gatewayIP = gwMatch[1];
@@ -273,13 +254,11 @@ const FirewallIndicator = GObject.registerClass(
 
             if (oldNetwork !== this._currentNetwork) {
                 log(`[Firewall Monitor] Switched from ${oldNetwork} to ${this._currentNetwork}`);
-                // Reset warning flag for new network
                 this._hasShownWarningForNetwork = false;
             }
         }
 
         _createMenu() {
-            // Header
             let headerItem = new PopupMenu.PopupMenuItem('Firewall Activity', {
                 reactive: false,
                 can_focus: false,
@@ -289,13 +268,11 @@ const FirewallIndicator = GObject.registerClass(
 
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-            // Events section
             this._eventsSection = new PopupMenu.PopupMenuSection();
             this.menu.addMenuItem(this._eventsSection);
 
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-            // History button
             let historyItem = new PopupMenu.PopupMenuItem('Show Full History');
             historyItem.connect('activate', () => {
                 let dialog = new FirewallHistoryDialog(this._events);
@@ -303,14 +280,12 @@ const FirewallIndicator = GObject.registerClass(
             });
             this.menu.addMenuItem(historyItem);
 
-            // Clear button
             let clearItem = new PopupMenu.PopupMenuItem('Clear History');
             clearItem.connect('activate', () => this._clearEvents());
             this.menu.addMenuItem(clearItem);
 
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-            // Notification toggle
             this._notificationSwitch = new PopupMenu.PopupSwitchMenuItem('Notifications',
                 this._settings.get_boolean('enable-notifications'));
 
@@ -318,7 +293,6 @@ const FirewallIndicator = GObject.registerClass(
                 this._settings.set_boolean('enable-notifications', state);
             });
 
-            // Keep switch in sync with settings
             this._settings.connect('changed::enable-notifications', () => {
                 this._notificationSwitch.setToggleState(this._settings.get_boolean('enable-notifications'));
             });
@@ -328,13 +302,12 @@ const FirewallIndicator = GObject.registerClass(
 
         _startMonitoring() {
             try {
-                // Spawn journalctl process to follow kernel logs
                 let [success, pid, stdin, stdout, stderr] = GLib.spawn_async_with_pipes(
-                    null, // working directory
+                    null,
                     ['journalctl', '-k', '-f', '--no-pager', '-o', 'short-iso'],
-                    null, // environment
+                    null,
                     GLib.SpawnFlags.SEARCH_PATH | GLib.SpawnFlags.DO_NOT_REAP_CHILD,
-                    null // child setup
+                    null
                 );
 
                 if (!success) {
@@ -344,10 +317,8 @@ const FirewallIndicator = GObject.registerClass(
 
                 this._pid = pid;
 
-                // Close stdin
                 GLib.close(stdin);
 
-                // Create stream for stdout
                 let stream = new Gio.DataInputStream({
                     base_stream: new Gio.UnixInputStream({
                         fd: stdout,
@@ -356,10 +327,8 @@ const FirewallIndicator = GObject.registerClass(
                     close_base_stream: true,
                 });
 
-                // Read lines asynchronously
                 this._readLines(stream);
 
-                // Watch for process exit
                 GLib.child_watch_add(GLib.PRIORITY_DEFAULT, pid, () => {
                     this._pid = null;
                 });
@@ -376,7 +345,6 @@ const FirewallIndicator = GObject.registerClass(
 
                     if (line !== null) {
                         this._processLogLine(line);
-                        // Continue reading
                         this._readLines(source);
                     }
                 } catch (e) {
@@ -388,9 +356,6 @@ const FirewallIndicator = GObject.registerClass(
         }
 
         _processLogLine(line) {
-            // Parse UFW log format
-            // Example: 2026-02-07T19:21:55+0300 arch kernel: [UFW BLOCK] IN=wlp0s20f3 OUT= MAC=... SRC=202.61.229.140 DST=192.168.0.6 ... PROTO=UDP SPT=17101 DPT=11562 ...
-
             if (!line.includes('[UFW BLOCK]') && !line.includes('[UFW AUDIT]')) {
                 return;
             }
@@ -403,11 +368,9 @@ const FirewallIndicator = GObject.registerClass(
 
         _parseFirewallEvent(line) {
             try {
-                // Extract timestamp
                 let timestampMatch = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/);
                 let timestamp = timestampMatch ? timestampMatch[1] : new Date().toISOString();
 
-                // Extract fields using regex
                 let srcMatch = line.match(/SRC=([^\s]+)/);
                 let dstMatch = line.match(/DST=([^\s]+)/);
                 let protoMatch = line.match(/PROTO=([^\s]+)/);
@@ -423,22 +386,19 @@ const FirewallIndicator = GObject.registerClass(
                 let destIP = dstMatch ? dstMatch[1] : 'unknown';
                 let protocol = protoMatch[1];
 
-                // Map protocol numbers to names
                 if (protocol === '2') protocol = 'IGMP';
                 if (protocol === '1') protocol = 'ICMP';
                 if (protocol === '6') protocol = 'TCP';
                 if (protocol === '17') protocol = 'UDP';
 
-                // Filter out router/gateway pings
                 if (this._gatewayIP && sourceIP === this._gatewayIP.trim()) {
                     return null;
                 }
 
-                // Filter local discovery (mDNS, IGMP, broadcast, IPv6 link-local, LLMNR)
                 if (this._settings.get_boolean('filter-local-discovery')) {
                     const localDiscoveryIPs = [
                         '224.0.0.1', '224.0.0.251', '255.255.255.255',
-                        'ff02::1', 'ff02::fb', 'ff02::1:3' // IPv6 Multicast (All nodes, mDNS, LLMNR)
+                        'ff02::1', 'ff02::fb', 'ff02::1:3'
                     ];
 
                     if (localDiscoveryIPs.includes(destIP)) {
@@ -448,12 +408,10 @@ const FirewallIndicator = GObject.registerClass(
                         return null;
                     }
 
-                    // Filter IPv6 link-local
                     if (sourceIP.startsWith('fe80:')) {
                         return null;
                     }
 
-                    // Filter LLMNR (UDP 5355)
                     if (protocol === 'UDP' && dptMatch && dptMatch[1] === '5355') {
                         return null;
                     }
@@ -467,7 +425,7 @@ const FirewallIndicator = GObject.registerClass(
                     sourcePort: sptMatch ? sptMatch[1] : 'N/A',
                     destPort: dptMatch ? dptMatch[1] : 'N/A',
                     interface: inMatch ? inMatch[1] : 'unknown',
-                    flag: '🏳️' // Default flag placeholder
+                    flag: '🏳️'
                 };
             } catch (e) {
                 logError(e, 'Error parsing firewall event');
@@ -478,14 +436,12 @@ const FirewallIndicator = GObject.registerClass(
         async _fetchGeoIP(event) {
             let ip = event.sourceIP;
 
-            // Skip private IPs
             if (ip.startsWith('192.168.') || ip.startsWith('10.') ||
                 ip.startsWith('127.') || ip.startsWith('172.1') ||
                 ip.startsWith('169.254.') || ip.startsWith('fe80:')) {
                 return;
             }
 
-            // Check if network is available
             if (!this._networkMonitor.network_available) {
                 return;
             }
@@ -555,7 +511,7 @@ const FirewallIndicator = GObject.registerClass(
                             this._updateMenu();
                         } else {
                             log(`[Firewall Monitor] Fallback GeoIP failed for ${ip}`);
-                            this._geoipCache.set(ip, null); // Mark as failed to avoid repeated lookups
+                            this._geoipCache.set(ip, null);
                         }
                     } catch (e) {
                         log(`[Firewall Monitor] Fallback GeoIP error: ${e.message}`);
@@ -576,26 +532,21 @@ const FirewallIndicator = GObject.registerClass(
         }
 
         _addEvent(event) {
-            // Add to events array (circular buffer)
             this._events.unshift(event);
             if (this._events.length > MAX_EVENTS) {
                 this._events.pop();
             }
 
-            // Check if this is the first hit on a new network
             if (!this._hasShownWarningForNetwork && this._currentNetwork) {
                 this._showNetworkWarning(event);
                 this._hasShownWarningForNetwork = true;
             }
 
-            // Update UI
             this._updateMenu();
             this._updateLabel();
 
-            // Fetch GeoIP
             this._fetchGeoIP(event);
 
-            // Show notification (with cooldown)
             let now = Date.now();
             if (now - this._lastNotification > NOTIFICATION_COOLDOWN) {
                 this._showNotification(event);
@@ -615,7 +566,6 @@ const FirewallIndicator = GObject.registerClass(
         }
 
         _updateMenu() {
-            // Clear existing items
             this._eventsSection.removeAll();
 
             if (this._events.length === 0) {
@@ -628,7 +578,6 @@ const FirewallIndicator = GObject.registerClass(
                 return;
             }
 
-            // Add recent events (show last 10)
             let eventsToShow = this._events.slice(0, 10);
             eventsToShow.forEach(event => {
                 let flag = event.flag || '🏳️';
@@ -642,7 +591,6 @@ const FirewallIndicator = GObject.registerClass(
                     Main.notify('Copied to clipboard', copyText);
                 });
 
-                // Color code by protocol
                 let color = '#ffffff';
                 if (event.protocol === 'TCP') {
                     color = '#ff6b6b';
@@ -656,7 +604,6 @@ const FirewallIndicator = GObject.registerClass(
                 this._eventsSection.addMenuItem(item);
             });
 
-            // Add "and X more" if there are more events
             if (this._events.length > 10) {
                 let moreItem = new PopupMenu.PopupMenuItem(
                     `... and ${this._events.length - 10} more`,
@@ -720,13 +667,11 @@ const FirewallIndicator = GObject.registerClass(
         }
 
         destroy() {
-            // Disconnect network monitor
             if (this._networkChangedId) {
                 this._networkMonitor.disconnect(this._networkChangedId);
                 this._networkChangedId = null;
             }
 
-            // Kill journalctl process
             if (this._pid) {
                 try {
                     GLib.spawn_command_line_sync(`kill ${this._pid}`);
