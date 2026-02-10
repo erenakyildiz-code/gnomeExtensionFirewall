@@ -13,8 +13,8 @@ import Soup from 'gi://Soup?version=3.0';
 
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const MAX_EVENTS = 50;
-const NOTIFICATION_COOLDOWN = 5000;
+
+
 
 const NetworkWarningDialog = GObject.registerClass({
     Signals: { 'view-details': {} },
@@ -180,13 +180,14 @@ const FirewallIndicator = GObject.registerClass(
 
             this._extension = extension;
             this._events = [];
-            this._lastNotification = 0;
+
 
             this._networkMonitor = Gio.NetworkMonitor.get_default();
             this._settings = extension.getSettings();
             this._currentNetwork = null;
             this._gatewayIP = null;
-            this._hasShownWarningForNetwork = false;
+            this._localIPs = new Set();
+            this._recentBlocks = new Map();
             this._networkChangedId = null;
 
             this._geoipCache = new Map();
@@ -224,6 +225,7 @@ const FirewallIndicator = GObject.registerClass(
 
         _detectNetwork() {
             try {
+                // Get default gateway and interface
                 let [success, stdout] = GLib.spawn_command_line_sync('ip route show default');
                 if (success) {
                     let output = new TextDecoder().decode(stdout);
@@ -242,6 +244,23 @@ const FirewallIndicator = GObject.registerClass(
                         log(`[Firewall Monitor] No gateway detected`);
                     }
                 }
+
+                // Get all local IP addresses using 'ip addr'
+                this._localIPs.clear();
+                let [ipSuccess, ipStdout] = GLib.spawn_command_line_sync('ip addr');
+                if (ipSuccess) {
+                    let ipOutput = new TextDecoder().decode(ipStdout);
+                    // Match inet (IPv4) and inet6 (IPv6) addresses
+                    // Regex looks for 'inet <ip>/<mask>' or 'inet6 <ip>/<mask>'
+                    let regex = /inet6?\s+([^\/\s]+)/g;
+                    let match;
+                    while ((match = regex.exec(ipOutput)) !== null) {
+                        if (match[1] !== '127.0.0.1' && match[1] !== '::1') {
+                            this._localIPs.add(match[1]);
+                        }
+                    }
+                    log(`[Firewall Monitor] Detected local IPs: ${Array.from(this._localIPs).join(', ')}`);
+                }
             } catch (e) {
                 logError(e, 'Error detecting network');
             }
@@ -254,7 +273,7 @@ const FirewallIndicator = GObject.registerClass(
 
             if (oldNetwork !== this._currentNetwork) {
                 log(`[Firewall Monitor] Switched from ${oldNetwork} to ${this._currentNetwork}`);
-                this._hasShownWarningForNetwork = false;
+                this._recentBlocks.clear();
             }
         }
 
@@ -286,18 +305,7 @@ const FirewallIndicator = GObject.registerClass(
 
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-            this._notificationSwitch = new PopupMenu.PopupSwitchMenuItem('Notifications',
-                this._settings.get_boolean('enable-notifications'));
 
-            this._notificationSwitch.connect('toggled', (item, state) => {
-                this._settings.set_boolean('enable-notifications', state);
-            });
-
-            this._settings.connect('changed::enable-notifications', () => {
-                this._notificationSwitch.setToggleState(this._settings.get_boolean('enable-notifications'));
-            });
-
-            this.menu.addMenuItem(this._notificationSwitch);
         }
 
         _startMonitoring() {
@@ -392,6 +400,10 @@ const FirewallIndicator = GObject.registerClass(
                 if (protocol === '17') protocol = 'UDP';
 
                 if (this._gatewayIP && sourceIP === this._gatewayIP.trim()) {
+                    return null;
+                }
+
+                if (this._localIPs && this._localIPs.has(sourceIP)) {
                     return null;
                 }
 
@@ -533,25 +545,33 @@ const FirewallIndicator = GObject.registerClass(
 
         _addEvent(event) {
             this._events.unshift(event);
-            if (this._events.length > MAX_EVENTS) {
-                this._events.pop();
+
+            // Check warning threshold: 4 blocks in 2 seconds from same IP
+            let now = Date.now();
+            let sourceIP = event.sourceIP;
+
+            if (!this._recentBlocks.has(sourceIP)) {
+                this._recentBlocks.set(sourceIP, []);
             }
 
-            if (!this._hasShownWarningForNetwork && this._currentNetwork) {
+            let timestamps = this._recentBlocks.get(sourceIP);
+            timestamps.push(now);
+
+            // Keep only timestamps within last 2 seconds (2000 ms)
+            timestamps = timestamps.filter(t => now - t <= 2000);
+            this._recentBlocks.set(sourceIP, timestamps);
+
+            // If we hit 4 blocks in 2 seconds, warn and reset
+            if (timestamps.length >= 4) {
                 this._showNetworkWarning(event);
-                this._hasShownWarningForNetwork = true;
+                // Reset to avoid immediate re-trigger on 5th block
+                this._recentBlocks.set(sourceIP, []);
             }
 
             this._updateMenu();
             this._updateLabel();
 
             this._fetchGeoIP(event);
-
-            let now = Date.now();
-            if (now - this._lastNotification > NOTIFICATION_COOLDOWN) {
-                this._showNotification(event);
-                this._lastNotification = now;
-            }
         }
 
         _showNetworkWarning(event) {
@@ -618,27 +638,7 @@ const FirewallIndicator = GObject.registerClass(
             this._label.text = this._events.length.toString();
         }
 
-        _showNotification(event) {
-            if (!this._settings.get_boolean('enable-notifications')) {
-                return;
-            }
 
-            let source = new MessageTray.Source({
-                title: 'Firewall Monitor',
-                icon: new Gio.ThemedIcon({ name: 'security-high-symbolic' }),
-            });
-
-            Main.messageTray.add(source);
-
-            let notification = new MessageTray.Notification({
-                source: source,
-                title: 'Connection Blocked',
-                body: `${event.sourceIP} tried to connect to port ${event.destPort} (${event.protocol})`,
-                isTransient: true,
-            });
-
-            source.addNotification(notification);
-        }
 
         _showError(message) {
             log(`[Firewall Monitor] ${message}`);

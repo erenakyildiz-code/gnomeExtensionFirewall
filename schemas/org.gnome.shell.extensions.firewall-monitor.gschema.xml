@@ -2,19 +2,7 @@
 <schemalist>
   <schema id="org.gnome.shell.extensions.firewall-monitor" path="/org/gnome/shell/extensions/firewall-monitor/">
     
-    <!-- Notification Settings -->
-    <key name="enable-notifications" type="b">
-      <default>true</default>
-      <summary>Enable Notifications</summary>
-      <description>Show desktop notifications for blocked connections</description>
-    </key>
-    
-    <key name="notification-cooldown" type="i">
-      <default>5</default>
-      <range min="1" max="60"/>
-      <summary>Notification Cooldown</summary>
-      <description>Minimum seconds between notifications to avoid spam</description>
-    </key>
+
     
     <!-- Display Settings -->
     <key name="max-events" type="i">

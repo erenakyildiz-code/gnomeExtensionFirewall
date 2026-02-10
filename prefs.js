@@ -14,40 +14,7 @@ export default class FirewallMonitorPreferences extends ExtensionPreferences {
         });
         window.add(page);
 
-        const notificationGroup = new Adw.PreferencesGroup({
-            title: 'Notifications',
-            description: 'Configure notification behavior',
-        });
-        page.add(notificationGroup);
 
-        const enableNotificationsRow = new Adw.SwitchRow({
-            title: 'Enable Notifications',
-            subtitle: 'Show notifications for blocked connections',
-        });
-        notificationGroup.add(enableNotificationsRow);
-        settings.bind(
-            'enable-notifications',
-            enableNotificationsRow,
-            'active',
-            Gio.SettingsBindFlags.DEFAULT
-        );
-
-        const cooldownRow = new Adw.SpinRow({
-            title: 'Notification Cooldown',
-            subtitle: 'Minimum seconds between notifications',
-            adjustment: new Gtk.Adjustment({
-                lower: 1,
-                upper: 60,
-                step_increment: 1,
-            }),
-        });
-        notificationGroup.add(cooldownRow);
-        settings.bind(
-            'notification-cooldown',
-            cooldownRow,
-            'value',
-            Gio.SettingsBindFlags.DEFAULT
-        );
 
         const displayGroup = new Adw.PreferencesGroup({
             title: 'Display',
