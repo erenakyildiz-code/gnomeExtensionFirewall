@@ -399,6 +399,10 @@ const FirewallIndicator = GObject.registerClass(
                 if (protocol === '6') protocol = 'TCP';
                 if (protocol === '17') protocol = 'UDP';
 
+                if (sourceIP === '127.0.0.1' || sourceIP === '::1' || sourceIP === '0000:0000:0000:0000:0000:0000:0000:0001') {
+                    return null;
+                }
+
                 if (this._gatewayIP && sourceIP === this._gatewayIP.trim()) {
                     return null;
                 }
